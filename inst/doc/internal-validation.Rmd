@@ -1,0 +1,178 @@
+---
+title: "Internal validation using `pmcalibration`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Internal validation using `pmcalibration`}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+`pmcalibration` is focused on the *external validation* of existing models on new data. Nevertheless, it is possible to use the functions provided to perform *internal validation* of a model developed on a particular data set. This vignette focuses on internal validation via the calculation of *optimism* through bootstrap resampling (see References). 
+
+First we simulate some data with two 'true' predictors (`x1`, `x2`) that interact to predict the outcome and we add two 'noise' variables (`x3`, `x4`) which do not relate to the outcome. The model we consider (`m1`) is one with all 4 variables and their two way interactions.[^fn] 
+
+[^fn]: Note that this is not supposed to be an example of good model building! See the [TRIPOD statement](https://www.equator-network.org/reporting-guidelines/tripod-statement/) for guidance.
+
+```{r setup}
+library(pmcalibration)
+library(data.table)
+
+n <- 1000
+dat <- sim_dat(n, a1 = -3, a3 = .3)
+# add some noise variables
+dat$x3 <- rnorm(n)
+dat$x4 <- rnorm(n)
+
+mean(dat$y)
+
+m1 <- glm(y ~ (x1 + x2 + x3 + x4)^2, data = dat, 
+          family = binomial(link = "logit"))
+
+p1 <- predict(m1, type="response")
+
+```
+
+We can use `pmcalibration` to plot a calibration curve for this model but glms are always perfectly calibrated for the data they were developed in so this is of zero use. 
+<!-- citation needed... -->
+
+```{r, fig.width=6, fig.height=5}
+(cc_app <- pmcalibration(y = dat$y, p = p1, smooth = "gam", bs="tp", ci="none"))
+
+plot(cc_app)
+```
+
+Internal validation can provide an unbiased assessment of the performance of a model building strategy. 
+<!-- elaborate -->
+
+The bootstrap optimism approach to internal validation of some performance metric ($M$) proceeds as follows:
+
+1. Estimate *apparent* performance ($M_{appar}$) of the model building strategy in the full development sample. In the case of calibration this could be $Eavg_{appar}$.
+2. Resample with replacement from the development data to create a bootstrap sample with same number of observations. 
+3. Run the *entire model development process* on the bootstrap sample.
+4. Using the model developed in Step 3, calculate the metrics of interest on the bootstrap sample ($M_{boot}$) and on the original sample ($M_{orig}$).
+5. Optimism is the difference in performance between the model as evaluated on the bootstrap sample and the original sample: $M_{opt} = M_{boot} - M_{orig}$
+6. Run steps 2 to 5 $B$ times (where $B \geq 100$) and average $M_{opt}$ across resamples. 
+7. Optimism corrected (or bias corrected) performance is $M_{appar} - \mbox{mean}({M}_{opt})$.
+
+Below is a function to implement this bootstrap optimism for calibration metrics. It requires two other functions be specified. One function that implements the entire model development process and returns the fitted model object. And a second function that takes the fitted model object and produces predicted probabilities for a given data set. The functions below work for our all-two-way-interactions model.
+
+```{r}
+mod <- function(data){
+  # function that implements the model development procedure
+  glm(y ~ (x1 + x2 + x3 + x4)^2, data = data, 
+          family = binomial(link = "logit"))
+}
+
+pred <- function(model, data){
+  # function to get predictions
+  predict.glm(object = model, newdata = data, type="response")
+}
+```
+
+This function implements the steps described above and *should* work for any sensible combination of `model_fun` and `pred_fun`. It hasn't been widely tested though so should be used with care! `y` is the name of the outcome column in `data` and `B` is the number of bootstrap replicates. This example uses the `gam` smooth in `pmcalibration` though this could easily be changed.
+
+```{r}
+internal_cal <- function(model_fun, data, pred_fun, y="y", B=100){
+  # assess apparent performance
+  appmodel <- model_fun(data)
+  p <- pred_fun(appmodel, data)
+  pp <- seq(min(p), max(p), length.out=100) # for plotting
+  apparent <- pmcalibration(y = data[[y]], p = p, smooth = "gam", ci = "none", neval = pp)
+  
+  # one bootstrap resample
+  one_boot <- function(model, data, pred_fun){
+    d <- data[sample(nrow(data), replace = T), ]
+    #modelcall[["data"]] <- d
+    
+    # bootmodel <- eval(modelcall) # fit model on resampled data
+    bootmodel <- model_fun(d)
+    
+    p_boot <- pred_fun(bootmodel, d) # evaluate on 'training' data (bootstrap resample)
+    p_orig <- pred_fun(bootmodel, data) # evaluate on 'test' (original data)
+    
+    cc_boot <- pmcalibration(y = d[[y]], p = p_boot, smooth = "gam", ci = "none", neval = pp)
+    cc_orig <- pmcalibration(y = data[[y]], p = p_orig, smooth = "gam", ci = "none", neval = pp)
+    
+    # calculate optimism and return
+    metrics_optimism <- cc_boot$metrics - cc_orig$metrics
+    plot_optimism <- cc_boot$plot$p_c_plot - cc_orig$plot$p_c_plot
+    
+    return(list(metrics_optimism, plot_optimism))
+  }
+  # run B bootstrap replicates (could be sped up via, e.g., pbapply)
+  opt <- lapply(seq(B), function(i){
+    one_boot(model = model, data = data, pred_fun = pred_fun)
+  })
+  # calculate average optimism for metrics and plot (to make bias corrected curve)
+  metrics_opt <- rbindlist(lapply(opt, function(x) data.frame(t(x[[1]]))))
+  metrics_opt <- apply(metrics_opt, 2, mean)
+  plot_opt <- rbindlist(lapply(opt, function(x) data.frame(t(x[[2]]))))
+  plot_opt <- apply(plot_opt, 2, mean)
+  # return
+  out <- list(
+    metrics = data.frame(apparent = apparent$metrics, 
+                         optimism = metrics_opt, 
+                         bias_corrected = apparent$metrics - metrics_opt
+    ),
+    plot = data.frame(p = pp, 
+                      apparent = apparent$plot$p_c_plot, 
+                      optimism = plot_opt, 
+                      bias_corrected = apparent$plot$p_c_plot - plot_opt
+    )
+  )
+  
+  return(out)
+}
+
+```
+
+The code below runs internal validation on calibration metrics for the two way interaction model.
+
+```{r, fig.width=6, fig.height=5}
+iv <- internal_cal(model_fun = mod, data = dat, pred_fun = pred)
+
+iv$metrics
+
+plot(iv$plot$p, iv$plot$apparent, type="l", xlim=c(0,1), ylim=c(0,1), 
+     xlab="Predicted", ylab="Observed")
+lines(iv$plot$p, iv$plot$bias_corrected, lty=2)
+legend("topleft", lty=c(1,2), legend = c("Apparent", "Bias Corrected"))
+
+```
+
+Suppose we consider another model building strategy in which we use backwards stepwise selection of variables via AIC. This can be assessed by simply changing the `model_fun` argument (the `pred_fun` works with the returned object so doesn't need to be changed). 
+
+```{r, fig.width=6, fig.height=5}
+mod2 <- function(data){
+  # function that implements the model development procedure
+  m <- glm(y ~ (x1 + x2 + x3 + x4)^2, data = data, 
+          family = binomial(link = "logit"))
+  
+  step(m, direction = "backward", trace = 0)
+}
+
+
+iv2 <- internal_cal(model_fun = mod2, data = dat, pred_fun = pred)
+
+iv2$metrics
+
+plot(iv2$plot$p, iv2$plot$apparent, type="l", xlim=c(0,1), ylim=c(0,1), 
+     xlab="Predicted", ylab="Observed")
+lines(iv2$plot$p, iv2$plot$bias_corrected, lty=2)
+legend("topleft", lty=c(1,2), legend = c("Apparent", "Bias Corrected"))
+
+```
+
+# References
+
+Steyerberg, E. W., Bleeker, S. E., Moll, H. A., Grobbee, D. E., & Moons, K. G. (2003). Internal and external validation of predictive models: a simulation study of bias and precision in small samples. Journal of clinical epidemiology, 56(5), 441-447. https://doi.org/10.1016/s0895-4356(03)00047-7
+
+Harrell Jr, F. E., Lee, K. L., & Mark, D. B. (1996). Multivariable prognostic models: issues in developing models, evaluating assumptions and adequacy, and measuring and reducing errors. Statistics in medicine, 15(4), 361-387. 
+<!-- https://doi.org/10.1002/(SICI)1097-0258(19960229)15:4<361::AID-SIM168>3.0.CO;2-4 -->
