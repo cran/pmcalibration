@@ -3,7 +3,7 @@ citHeader("To cite the 'pmcalibration' R package in publications, please use:")
 bibentry(bibtype = "Manual",
          title = "pmcalibration: Calibration curves for clinical prediction models",
          author  = person(given = "Stephen", family = "Rhodes"),
-         year = "2023",
-         note = "R package version 0.1.0",
+         year = "2025",
+         note = "R package version 0.2.0",
          url = "https://github.com/stephenrho/pmcalibration"
 )

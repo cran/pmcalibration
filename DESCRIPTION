@@ -1,7 +1,7 @@
 Package: pmcalibration
 Type: Package
 Title: Calibration Curves for Clinical Prediction Models
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: person(given = "Stephen", family = "Rhodes", email= "steverho89@gmail.com", role=c("aut", "cre", "cph"))
 Maintainer: Stephen Rhodes <steverho89@gmail.com>
 Description: Fit calibrations curves for clinical prediction models and calculate several associated 
@@ -15,15 +15,14 @@ Description: Fit calibrations curves for clinical prediction models and calculat
   Austin et al. (2020) <doi:10.1002/sim.8570>.
 License: GPL-3
 Encoding: UTF-8
-RoxygenNote: 7.2.3
+RoxygenNote: 7.3.2
 URL: https://github.com/stephenrho/pmcalibration
 BugReports: https://github.com/stephenrho/pmcalibration/issues
-Imports: Hmisc, MASS, checkmate, chk, mgcv, splines, graphics, stats,
-        methods, survival, pbapply, parallel
-Suggests: knitr, rmarkdown, data.table, ggplot2, rms, simsurv
-VignetteBuilder: knitr
+Imports: Hmisc, MASS, mgcv, splines, graphics, stats, methods,
+        survival, pbapply, parallel, grDevices
+Suggests: rmarkdown, data.table, ggplot2, rms, simsurv
 NeedsCompilation: no
-Packaged: 2023-09-06 00:19:48 UTC; stephenrhodes
+Packaged: 2025-02-21 22:08:16 UTC; stephenrhodes
 Author: Stephen Rhodes [aut, cre, cph]
 Repository: CRAN
-Date/Publication: 2023-09-06 17:50:02 UTC
+Date/Publication: 2025-02-21 22:20:02 UTC

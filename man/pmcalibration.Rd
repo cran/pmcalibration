@@ -7,12 +7,13 @@
 pmcalibration(
   y,
   p,
-  smooth = c("none", "ns", "bs", "rcs", "gam", "lowess", "loess"),
+  smooth = c("gam", "none", "ns", "bs", "rcs", "lowess", "loess"),
   time = NULL,
   ci = c("sim", "boot", "pw", "none"),
   n = 1000,
   transf = NULL,
   eval = 100,
+  plot = TRUE,
   ...
 )
 }
@@ -23,10 +24,10 @@ pmcalibration(
 
 \item{smooth}{what smooth to use. Available options:
 \itemize{
+\item{'gam' (default) = generalized additive model via \code{mgcv::gam} and \code{mgcv::s}. Optional arguments are \code{bs}, \code{k}, \code{fx}, \code{method} (see \code{?mgcv::gam} and  \code{?mgcv::s}) }
 \item{'rcs' = restricted cubic spline using \code{rms::rcs}. Optional arguments for this smooth are \code{nk} (number of knots; defaults to 5) and \code{knots} (knot positions; set by \code{Hmisc::rcs.eval} if not specified) }
 \item{'ns' = natural spline using \code{splines::ns}. Optional arguments are \code{df} (default = 6), \code{knots}, \code{Boundary.knots} (see \code{?splines::ns}) }
 \item{'bs' = B-spline using \code{splines::bs}. Optional arguments are \code{df} (default = 6), \code{knots}, \code{Boundary.knots} (see \code{?splines::bs}) }
-\item{'gam' = generalized additive model via \code{mgcv::gam} and \code{mgcv::s}. Optional arguments are \code{bs}, \code{k}, \code{fx}, \code{method} (see \code{?mgcv::gam} and  \code{?mgcv::s}) }
 \item{'lowess' = uses \code{lowess(x, y, iter = 0)} based on \code{rms::calibrate}. Only for binary outcomes.}
 \item{'loess' = uses \code{loess} with all defaults. Only for binary outcomes. }
 \item{'none' = logistic or Cox regression with single predictor variable (for binary outcome performs logistic calibration when \code{transf = "logit"}). See \code{\link{logistic_cal}} }
@@ -48,6 +49,8 @@ Calibration metrics are calculated using each simulation or boot sample. For bot
 \item{transf}{transformation to be applied to \code{p} prior to fitting calibration curve. Valid options are 'logit', 'cloglog', 'none', or a function (must retain order of \code{p}). If unspecified defaults to 'logit' for binary outcomes and 'cloglog' (complementary log-log) for time-to-event outcomes.}
 
 \item{eval}{number of points (equally spaced between \code{min(p)} and \code{max(p)}) to evaluate for plotting (0 or NULL = no plotting). Can be a vector of probabilities.}
+
+\item{plot}{should a plot be produced? Default = TRUE. Plot is created with default settings. See \code{\link{plot.pmcalibration}}.}
 
 \item{...}{additional arguments for particular smooths. For ci = 'boot' the user is able to run samples in parallel (using the \code{parallel} package) by specifying a \code{cores} argument}
 }
@@ -86,7 +89,6 @@ transplant$ltx <- as.numeric(transplant$event == "ltx")
 
 # get predictions from coxph model at time = 100
 # note that as we are fitting and evaluating the model on the same data
-# this is internal calibration (see vignette("internal-validation", package = "pmcalibration"))
 cph <- coxph(Surv(futime, ltx) ~ age + sex + abo + year, data = transplant)
 
 time <- 100

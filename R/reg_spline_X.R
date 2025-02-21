@@ -21,7 +21,11 @@ reg_spline_X <- function(x, xp, smooth, ...){
 
   # make matrix of predictors (i.e., spline basis functions, if any)
   if (smooth == "none"){
-    X = x #model.matrix(~x)
+    X <- x #model.matrix(~x)
+    Xp <- xp
+
+    smooth_args <- list(smooth = "none")
+
   } else if (smooth == "rcs"){
     if ("nk" %in% names(dots)) nk <- dots[['nk']] else nk <- NULL
     if ("knots" %in% names(dots)) knots <- dots[['knots']] else knots <- NULL
@@ -49,7 +53,7 @@ reg_spline_X <- function(x, xp, smooth, ...){
     if ("Boundary.knots" %in% names(dots)) Boundary.knots <- dots[['Boundary.knots']] else Boundary.knots <- NULL
 
     if (is.null(df) & is.null(knots)){
-      warning("for smooth = ns or bs either df or knots must be provided. Defaulting to df = 6")
+      message("for smooth = ns or bs either df or knots must be provided. Defaulting to df = 6")
       df <- 6
     }
 

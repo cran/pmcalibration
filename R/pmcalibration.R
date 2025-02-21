@@ -7,10 +7,10 @@
 #' @param p predicted probabilities from a clinical prediction model. For a time-to-event object \code{time} must be specified and \code{p} are predicted probabilities of the outcome happening by \code{time} units of time follow-up.
 #' @param smooth what smooth to use. Available options:
 #' \itemize{
+#' \item{'gam' (default) = generalized additive model via \code{mgcv::gam} and \code{mgcv::s}. Optional arguments are \code{bs}, \code{k}, \code{fx}, \code{method} (see \code{?mgcv::gam} and  \code{?mgcv::s}) }
 #' \item{'rcs' = restricted cubic spline using \code{rms::rcs}. Optional arguments for this smooth are \code{nk} (number of knots; defaults to 5) and \code{knots} (knot positions; set by \code{Hmisc::rcs.eval} if not specified) }
 #' \item{'ns' = natural spline using \code{splines::ns}. Optional arguments are \code{df} (default = 6), \code{knots}, \code{Boundary.knots} (see \code{?splines::ns}) }
 #' \item{'bs' = B-spline using \code{splines::bs}. Optional arguments are \code{df} (default = 6), \code{knots}, \code{Boundary.knots} (see \code{?splines::bs}) }
-#' \item{'gam' = generalized additive model via \code{mgcv::gam} and \code{mgcv::s}. Optional arguments are \code{bs}, \code{k}, \code{fx}, \code{method} (see \code{?mgcv::gam} and  \code{?mgcv::s}) }
 #' \item{'lowess' = uses \code{lowess(x, y, iter = 0)} based on \code{rms::calibrate}. Only for binary outcomes.}
 #' \item{'loess' = uses \code{loess} with all defaults. Only for binary outcomes. }
 #' \item{'none' = logistic or Cox regression with single predictor variable (for binary outcome performs logistic calibration when \code{transf = "logit"}). See \code{\link{logistic_cal}} }
@@ -27,6 +27,7 @@
 #' @param n number of simulations or bootstrap resamples
 #' @param transf transformation to be applied to \code{p} prior to fitting calibration curve. Valid options are 'logit', 'cloglog', 'none', or a function (must retain order of \code{p}). If unspecified defaults to 'logit' for binary outcomes and 'cloglog' (complementary log-log) for time-to-event outcomes.
 #' @param eval number of points (equally spaced between \code{min(p)} and \code{max(p)}) to evaluate for plotting (0 or NULL = no plotting). Can be a vector of probabilities.
+#' @param plot should a plot be produced? Default = TRUE. Plot is created with default settings. See \code{\link{plot.pmcalibration}}.
 #' @param ... additional arguments for particular smooths. For ci = 'boot' the user is able to run samples in parallel (using the \code{parallel} package) by specifying a \code{cores} argument
 #'
 #' @references Austin P. C., Steyerberg E. W. (2019) The Integrated Calibration Index (ICI) and related metrics for quantifying the calibration of logistic regression models. \emph{Statistics in Medicine}. 38, pp. 1–15. https://doi.org/10.1002/sim.8281
@@ -65,7 +66,6 @@
 #'
 #' # get predictions from coxph model at time = 100
 #' # note that as we are fitting and evaluating the model on the same data
-#' # this is internal calibration (see vignette("internal-validation", package = "pmcalibration"))
 #' cph <- coxph(Surv(futime, ltx) ~ age + sex + abo + year, data = transplant)
 #'
 #' time <- 100
@@ -81,12 +81,12 @@
 #'
 #' }
 pmcalibration <- function(y, p,
-                          smooth=c("none", "ns", "bs", "rcs", "gam", "lowess", "loess"),
+                          smooth=c("gam", "none", "ns", "bs", "rcs", "lowess", "loess"),
                           time = NULL,
                           ci = c("sim", "boot", "pw", "none"),
                           n=1000,
                           transf = NULL,
-                          eval=100, ...){
+                          eval=100, plot=TRUE, ...){
 
   # TODO
   # - survival methods (DONE glm, gam; todo - hare, flexsurv?)
@@ -94,12 +94,20 @@ pmcalibration <- function(y, p,
   call <- match.call()
   dots <- list(...)
 
-  chk::vld_compatible_lengths(y, p)
+  if (length(y) != length(p)) stop("y and p are not the same length")
 
   if (any(is.na(p)) | any(is.na(y))){
     i <- which(is.na(p) | is.na(y))
     y <- y[-i]; p <- p[-i]
     message(sprintf("%i records with missing values were removed", length(i)))
+  }
+
+  if (any(p <= 0 | p >= 1)){
+    i <- which(p <= 0 | p >= 1)
+    y <- y[-i]; p <- p[-i]
+    warning(sprintf("%i records with p <= 0 or p >= 1 were removed. ", length(i)),
+            "This suggests a potential problem with the model fit. ",
+            "Excluding these observations (or replacing them with values close to 0 or 1) will affect results so interpret with caution!")
   }
 
   smooth <- match.arg(smooth)
@@ -109,6 +117,7 @@ pmcalibration <- function(y, p,
 
   if (surv & ci == "sim") stop("Simulation based inference not available for time-to-event outcomes")
   if (surv & smooth %in% c("lowess", "loess")) stop("smooth = 'lowess' or 'loess' not available for time-to-event outcomes")
+  if (surv & is.null(time)) stop("time should be specified for a survival outcome")
 
   if (ci == "boot"){
     if ("cores" %in% names(dots)){
@@ -206,9 +215,11 @@ pmcalibration <- function(y, p,
   }
 
   out <- list(
+    data = data.frame(y = y, p = p),
     call = call,
     metrics = cal$metrics,
     metrics.samples = metrics.samples,
+    p_c = data.frame(p = p, p_c = cal$p_c),
     plot = list(
       p = pplot,
       p_c_plot = cal$p_c_plot,
@@ -226,6 +237,8 @@ pmcalibration <- function(y, p,
 
   class(out) <- "pmcalibration"
 
+  if (plot){
+    plot(out)
+  }
   return(out)
-
 }

@@ -2,23 +2,42 @@
 % Please edit documentation in R/utils.R
 \name{plot.pmcalibration}
 \alias{plot.pmcalibration}
-\title{Plot a calibration curve (\code{pmcalibration} object)}
+\title{Plot a calibration curve}
 \usage{
-\method{plot}{pmcalibration}(x, conf_level = 0.95, ...)
+\method{plot}{pmcalibration}(
+  x,
+  conf_level = 0.95,
+  riskdist = TRUE,
+  linecol = "black",
+  fillcol = "grey",
+  ideallty = 2,
+  idealcol = "red",
+  ...
+)
 }
 \arguments{
 \item{x}{a \code{pmcalibration} calibration curve}
 
 \item{conf_level}{width of the confidence interval (0.95 gives 95\% CI). Ignored if call to \code{pmcalibration} didn't request confidence intervals}
 
-\item{...}{other args for \code{plot()} (\code{lim} and \code{lab} can be specified)}
+\item{riskdist}{add risk distribution plot under calibration curve (TRUE) or not (FALSE)}
+
+\item{linecol}{color of the calibration curve line}
+
+\item{fillcol}{color of the confidence interval}
+
+\item{ideallty}{line type of the ideal unit slope line}
+
+\item{idealcol}{color of the ideal unit slope line}
+
+\item{...}{other args for \code{plot()} (currently only \code{lim}s and \code{lab}s can be specified)}
 }
 \value{
 No return value, called for side effects
 }
 \description{
-This is for a quick and dirty calibration curve plot.
-Alternatively you can use \code{get_cc()} to get the data required to plot the calibration curve.
+Plot a \code{pmcalibration} object. For binary outcomes, also plot the distribution of predicted risks by outcome.
+Alternatively you can use \code{get_curve()} to get the data required to plot the calibration curve.
 }
 \examples{
 library(pmcalibration)
@@ -30,7 +49,7 @@ head(dat)
 p <- with(dat, invlogit(.5 + x1 + x2 + x1*x2*.1))
 
 # fit calibration curve
-cal <- pmcalibration(y = dat$y, p = p, smooth = "gam", k = 20, ci = "pw")
+cal <- pmcalibration(y = dat$y, p = p, smooth = "gam", k = 20, ci = "pw", plot = FALSE)
 
-plot(cal)
+plot(cal, xlab = "Predicted Risk of Outcome") # customize plot
 }
